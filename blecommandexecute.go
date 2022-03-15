@@ -149,21 +149,28 @@ func bleCommandExecute(bleMessage string) {
 	check(err)
 }
 
-// This example implements a NUS (Nordic UART Service) peripheral.
-// I can't find much official documentation on the protocol, but this can be
-// helpful:
-// https://learn.adafruit.com/introducing-adafruit-ble-bluetooth-low-energy-friend/uart-service
-//
-// Code to interact with a raw terminal is in separate files with build tags.
-
 var (
 	serviceUUID = bluetooth.ServiceUUIDNordicUART
 	rxUUID      = bluetooth.CharacteristicUUIDUARTRX
 	txUUID      = bluetooth.CharacteristicUUIDUARTTX
 )
 
+func must(action string, err error) {
+	if err != nil {
+		panic("failed to " + action + ": " + err.Error())
+	}
+}
+
 func main() {
 	println("starting")
+	bleCommandExecute(`
+	{
+		"ssid": "livingroom",
+		"password": "12345678",
+		"network_server_address": "192.168.1.104",
+		"freq_plan": "EU868"
+	}
+	`)
 	adapter := bluetooth.DefaultAdapter
 	must("enable BLE stack", adapter.Enable())
 	adv := adapter.DefaultAdvertisement()
@@ -229,20 +236,4 @@ func main() {
 			//                      }
 		}
 	}
-}
-
-func must(action string, err error) {
-	if err != nil {
-		panic("failed to " + action + ": " + err.Error())
-	}
-
-	bleCommandExecute(`
-		{
-			"ssid": "livingroom",
-			"password": "12345678",
-			"network_server_address": "192.168.1.104",
-			"freq_plan": "EU868"
-		}
-		`)
-
 }
