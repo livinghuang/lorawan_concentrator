@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"strings"
 )
 
@@ -33,17 +33,17 @@ func check(e error) {
 func setFrequencyPlan(freq_plan string) {
 	// Perhaps the most basic file reading task is
 	// slurping a file's entire contents into memory.
-	targetFreqPlanData, err := os.ReadFile("./lora/lorasdk/global_conf_" + freq_plan + ".json")
+	targetFreqPlanData, err := ioutil.ReadFile("./lora/lorasdk/global_conf_" + freq_plan + ".json")
 	check(err)
 	targetFreqPlanDataSubstrings := strings.Split(string(targetFreqPlanData), `"gateway_conf":`)
 
-	globalConfig, err := os.ReadFile(LORA_GLOBAL_CONFIG_PATH)
+	globalConfig, err := ioutil.ReadFile(LORA_GLOBAL_CONFIG_PATH)
 	check(err)
 	globalConfigSubstrings := strings.Split(string(globalConfig), `"gateway_conf":`)
 
 	newStrings := targetFreqPlanDataSubstrings[0] + `"gateway_conf":` + globalConfigSubstrings[1]
 	// fmt.Println(newStrings) // 0
-	os.WriteFile(LORA_GLOBAL_CONFIG_PATH, []byte(newStrings), 0644)
+	ioutil.WriteFile(LORA_GLOBAL_CONFIG_PATH, []byte(newStrings), 0644)
 	check(err)
 	// json.Unmarshal(dat, &jsonObj)
 	// fmt.Print(jsonObj["gateway_conf"].(string))
@@ -54,7 +54,7 @@ func setNetworkServerAddress(network_server_address string) {
 
 	// Perhaps the most basic file reading task is
 	// slurping a file's entire contents into memory.
-	dat, err := os.ReadFile(LORA_GLOBAL_CONFIG_PATH)
+	dat, err := ioutil.ReadFile(LORA_GLOBAL_CONFIG_PATH)
 	check(err)
 	substrings := strings.Split(string(dat), "server_address")
 	indexComma := strings.Index(substrings[1], ",")
@@ -63,14 +63,14 @@ func setNetworkServerAddress(network_server_address string) {
 	// fmt.Println(substring) // 0
 	substring = substrings[0] + `server_address": "` + network_server_address + `"` + substring
 	// fmt.Println(substring) // 0
-	os.WriteFile(LORA_GLOBAL_CONFIG_PATH, []byte(substring), 0644)
+	ioutil.WriteFile(LORA_GLOBAL_CONFIG_PATH, []byte(substring), 0644)
 	check(err)
 }
 
 func setWifi(ssid string, password string) {
 	// Perhaps the most basic file reading task is
 	// slurping a file's entire contents into memory.
-	currentData, err := os.ReadFile(WIFI_CONFIG_PATH)
+	currentData, err := ioutil.ReadFile(WIFI_CONFIG_PATH)
 	check(err)
 	substrings := strings.Split(string(currentData), "network")
 	indexComma := strings.Index(substrings[1], "}")
@@ -83,12 +83,12 @@ func setWifi(ssid string, password string) {
         key_mgmt=WPA-PSK
 ` + substring
 	// fmt.Println(substring) // 0
-	os.WriteFile(WIFI_CONFIG_PATH, []byte(substring), 0644)
+	ioutil.WriteFile(WIFI_CONFIG_PATH, []byte(substring), 0644)
 	check(err)
 }
 
 func bleCommandExecute(bleMessage string) {
-	currentData, err := os.ReadFile(CONCENTRACTOR_CONFIG_PATH)
+	currentData, err := ioutil.ReadFile(CONCENTRACTOR_CONFIG_PATH)
 	check(err)
 	var concentractor concentractor
 	err = json.Unmarshal([]byte(currentData), &concentractor)
@@ -142,7 +142,7 @@ func bleCommandExecute(bleMessage string) {
 		return
 	}
 	fmt.Println(string(statusString))
-	os.WriteFile("./siliq_lorawan_concentractor_conf.json", []byte(statusString), 0644)
+	ioutil.WriteFile("./siliq_lorawan_concentractor_conf.json", []byte(statusString), 0644)
 	check(err)
 }
 
