@@ -20,7 +20,7 @@ type concentractor struct {
 
 const WIFI_CONFIG_PATH string = "./wpa_supplicant.conf"
 const CONCENTRACTOR_CONFIG_PATH string = "./siliq_lorawan_concentractor_conf.json"
-const LORA_GLOBAL_CONFIG_PATH string = "./global_conf.json"
+const LORA_GLOBAL_CONFIG_PATH string = "/home/pi/lora/packet_forwarder/lora_pkt_fwd/global_conf.json"
 
 // Reading files requires checking most calls for errors.
 // This helper will streamline our error checks below.
@@ -33,7 +33,7 @@ func check(e error) {
 func setFrequencyPlan(freq_plan string) {
 	// Perhaps the most basic file reading task is
 	// slurping a file's entire contents into memory.
-	targetFreqPlanData, err := ioutil.ReadFile("./lora/lorasdk/global_conf_" + freq_plan + ".json")
+	targetFreqPlanData, err := ioutil.ReadFile("/home/pi/lora/lorasdk/global_conf_" + freq_plan + ".json")
 	check(err)
 	targetFreqPlanDataSubstrings := strings.Split(string(targetFreqPlanData), `"gateway_conf":`)
 
