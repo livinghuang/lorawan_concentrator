@@ -18,7 +18,7 @@ type concentractor struct {
 	Freq_plan              string `json:freq_plan`
 }
 
-const WIFI_CONFIG_PATH string = "./wpa_supplicant.conf"
+const WIFI_CONFIG_PATH string = "/etc/wpa_supplicant/wpa_supplicant.conf"
 const CONCENTRACTOR_CONFIG_PATH string = "./siliq_lorawan_concentractor_conf.json"
 const LORA_GLOBAL_CONFIG_PATH string = "/home/pi/lora/packet_forwarder/lora_pkt_fwd/global_conf.json"
 
