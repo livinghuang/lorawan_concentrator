@@ -1,0 +1,6 @@
+{
+    "Ssid": "your_ssid",
+    "Password": "your_password",
+    "Network_server_address": "192.168.1.105",
+    "Freq_plan": "AS923_2"
+}
