@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
+	"os"
 	"strings"
 
 	"tinygo.org/x/bluetooth"
-	"tinygo.org/x/bluetooth/rawterm"
 )
 
 type BLE_COMMAND struct {
@@ -15,25 +16,54 @@ type BLE_COMMAND struct {
 }
 
 type concentractor struct {
-	Ssid                   string `json:ssid`
-	Password               string `json:password`
-	Network_server_address string `json:network_server_address`
-	Freq_plan              string `json:freq_plan`
+	Ssid                   string `json:Ssid`
+	Password               string `json:Password`
+	Network_server_address string `json:Network_server_address`
+	Freq_plan              string `json:Freq_plan`
 }
 
 const WIFI_CONFIG_PATH string = "/etc/wpa_supplicant/wpa_supplicant.conf"
 const CONCENTRACTOR_CONFIG_PATH string = "./siliq_lorawan_concentractor_conf.json"
 const LORA_GLOBAL_CONFIG_PATH string = "/home/pi/lora/packet_forwarder/lora_pkt_fwd/global_conf.json"
+const LOCAL_LORA_GLOBAL_CONFIG_PATH string = "/home/pi/lora/packet_forwarder/lora_pkt_fwd/local_conf.json"
+
+var rxChar bluetooth.Characteristic
+var txChar bluetooth.Characteristic
+var ble_name string
 
 // Reading files requires checking most calls for errors.
 // This helper will streamline our error checks below.
-func check(e error) {
+func check(e error) string {
 	if e != nil {
-		panic(e)
+		ErrorLogger.Println(e)
+		return "error"
+		// panic(e)
 	}
+	return "ok"
 }
 
-func setFrequencyPlan(freq_plan string) {
+func set_BLE_NAME() error {
+
+	// Perhaps the most basic file reading task is
+	// slurping a file's entire contents into memory.
+	dat, err := ioutil.ReadFile(LOCAL_LORA_GLOBAL_CONFIG_PATH)
+	check(err)
+	substrings := strings.Split(string(dat), "gateway_ID")
+	var i int
+	i = 0
+	for ; i < len(substrings); i++ {
+		if (substrings[1][i] >= 48) && (substrings[1][i] <= 57) || (substrings[1][i] >= 65) && (substrings[1][i] <= 70) || (substrings[1][i] >= 97) && (substrings[1][i] <= 102) {
+			break
+		}
+	}
+	substring := substrings[1][i+10 : i+16]
+	fmt.Println(substring)
+	ble_name = "SILIQ-" + substring
+	check(err)
+	return err
+}
+
+func setFrequencyPlan(freq_plan string) error {
 	// Perhaps the most basic file reading task is
 	// slurping a file's entire contents into memory.
 	targetFreqPlanData, err := ioutil.ReadFile("/home/pi/lora/lorasdk/global_conf_" + freq_plan + ".json")
@@ -45,15 +75,13 @@ func setFrequencyPlan(freq_plan string) {
 	globalConfigSubstrings := strings.Split(string(globalConfig), `"gateway_conf":`)
 
 	newStrings := targetFreqPlanDataSubstrings[0] + `"gateway_conf":` + globalConfigSubstrings[1]
-	// fmt.Println(newStrings) // 0
+	//fmt.Println(newStrings) // 0
 	ioutil.WriteFile(LORA_GLOBAL_CONFIG_PATH, []byte(newStrings), 0644)
 	check(err)
-	// json.Unmarshal(dat, &jsonObj)
-	// fmt.Print(jsonObj["gateway_conf"].(string))
-
+	return err
 }
 
-func setNetworkServerAddress(network_server_address string) {
+func setNetworkServerAddress(network_server_address string) error {
 
 	// Perhaps the most basic file reading task is
 	// slurping a file's entire contents into memory.
@@ -61,33 +89,30 @@ func setNetworkServerAddress(network_server_address string) {
 	check(err)
 	substrings := strings.Split(string(dat), "server_address")
 	indexComma := strings.Index(substrings[1], ",")
-	// fmt.Println(indexComma) // 0
 	substring := substrings[1][indexComma:len(substrings[1])]
-	// fmt.Println(substring) // 0
 	substring = substrings[0] + `server_address": "` + network_server_address + `"` + substring
-	// fmt.Println(substring) // 0
+	//fmt.Println(substring) // 0
 	ioutil.WriteFile(LORA_GLOBAL_CONFIG_PATH, []byte(substring), 0644)
 	check(err)
+	return err
 }
 
-func setWifi(ssid string, password string) {
+func setWifi(ssid string, password string) error {
 	// Perhaps the most basic file reading task is
 	// slurping a file's entire contents into memory.
 	currentData, err := ioutil.ReadFile(WIFI_CONFIG_PATH)
 	check(err)
 	substrings := strings.Split(string(currentData), "network")
 	indexComma := strings.Index(substrings[1], "}")
-	// fmt.Println(indexComma) // 0
 	substring := substrings[1][indexComma:len(substrings[1])]
-	// fmt.Println(substring) // 0
 	substring = substrings[0] + `network={
         ssid="` + ssid + `"
         psk="` + password + `"
         key_mgmt=WPA-PSK
 ` + substring
-	// fmt.Println(substring) // 0
 	ioutil.WriteFile(WIFI_CONFIG_PATH, []byte(substring), 0644)
 	check(err)
+	return err
 }
 
 func bleCommandExecute(bleMessage string) {
@@ -99,13 +124,15 @@ func bleCommandExecute(bleMessage string) {
 	// fmt.Println("concentractorCurrentStatus", concentractor)
 
 	if err != nil {
-		fmt.Println("JsonToMapDemo err: ", err)
+		ErrorLogger.Println("JsonToMap err: ", err)
+		blePrint([]byte(fmt.Sprint("JsonToMap err")))
 	}
 
 	var bleMessageMap map[string]interface{}
 	err = json.Unmarshal([]byte(bleMessage), &bleMessageMap)
 	if err != nil {
-		fmt.Println("JsonToMapDemo err: ", err)
+		ErrorLogger.Println("JsonToMap err: ", err)
+		blePrint([]byte(fmt.Sprint("JsonToMap err")))
 	}
 
 	for k, v := range bleMessageMap {
@@ -114,37 +141,45 @@ func bleCommandExecute(bleMessage string) {
 			if fmt.Sprint(v) == "read" {
 				statusString, err := json.Marshal(concentractor)
 				if err != nil {
-					fmt.Println(err)
+					// fmt.Println(err)
+					InfoLogger.Println("BLE COMMAND RESULT:" + k + " read fail")
 					return
 				}
-				fmt.Println(string(statusString))
+				InfoLogger.Println("BLE COMMAND RESULT:" + k + " read done")
+				// InfoLogger.Println("send Lorawan concentrator status to BLE: " + string(statusString))
+				blePrint(statusString)
+				continue
+			} else {
+				InfoLogger.Println("BLE COMMAND RESULT:" + k + " got illegal command")
+				blePrint([]byte("illegal command"))
 			}
-		case "ssid":
+		case "Ssid":
 			concentractor.Ssid = fmt.Sprint(v)
-			setWifi(concentractor.Ssid, concentractor.Password)
-			fmt.Println("Ssid setting ok")
-		case "password":
+			err = setWifi(concentractor.Ssid, concentractor.Password)
+		case "Password":
 			concentractor.Password = fmt.Sprint(v)
-			setWifi(concentractor.Ssid, concentractor.Password)
-			fmt.Println("Password setting ok")
-		case "network_server_address":
+			err = setWifi(concentractor.Ssid, concentractor.Password)
+		case "Network_server_address":
 			concentractor.Network_server_address = fmt.Sprint(v)
-			setNetworkServerAddress(concentractor.Network_server_address)
-			fmt.Println("Network server address setting ok")
-		case "freq_plan":
+			err = setNetworkServerAddress(concentractor.Network_server_address)
+		case "Freq_plan":
 			concentractor.Freq_plan = fmt.Sprint(v)
-			setFrequencyPlan(concentractor.Freq_plan)
-			fmt.Println("Freq_plan setting ok")
+			err = setFrequencyPlan(concentractor.Freq_plan)
+
 		default:
-			fmt.Println("error")
+			// fmt.Println("error")
+			ErrorLogger.Println("BLE COMMAND IllEGAL")
+			blePrint([]byte("command illegal"))
 		}
+		InfoLogger.Println("BLE COMMAND RESULT:" + k + " setting " + check(err))
+		blePrint([]byte(k + " setting " + check(err)))
 	}
 	statusString, err := json.Marshal(concentractor)
 	if err != nil {
-		fmt.Println(err)
+		ErrorLogger.Println(err)
+		blePrint([]byte(fmt.Sprint(err)))
 		return
 	}
-	fmt.Println(string(statusString))
 	ioutil.WriteFile("./siliq_lorawan_concentractor_conf.json", []byte(statusString), 0644)
 	check(err)
 }
@@ -157,31 +192,55 @@ var (
 
 func must(action string, err error) {
 	if err != nil {
+		ErrorLogger.Println("failed to " + action + ": " + err.Error())
 		panic("failed to " + action + ": " + err.Error())
 	}
 }
 
-func main() {
-	println("starting")
-	bleCommandExecute(`
-	{
-		"ssid": "livingroom",
-		"password": "12345678",
-		"network_server_address": "192.168.1.104",
-		"freq_plan": "EU868"
+func blePrint(sendbuf []byte) {
+	// Send the sendbuf after breaking it up in pieces.
+	for len(sendbuf) != 0 {
+		// Chop off up to 20 bytes from the sendbuf.
+		partlen := 160
+		if len(sendbuf) < 160 {
+			partlen = len(sendbuf)
+		}
+		part := sendbuf[:partlen]
+		sendbuf = sendbuf[partlen:]
+		// This also sends a notification.
+		_, err := txChar.Write(part)
+		must("send notification", err)
 	}
-	`)
+}
+
+var (
+	WarningLogger *log.Logger
+	InfoLogger    *log.Logger
+	ErrorLogger   *log.Logger
+)
+
+func init() {
+	file, err := os.OpenFile("logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	InfoLogger = log.New(file, "INFO: ", log.LstdFlags|log.Lshortfile)
+	WarningLogger = log.New(file, "WARNING: ", log.LstdFlags|log.Lshortfile)
+	ErrorLogger = log.New(file, "ERROR: ", log.LstdFlags|log.Lshortfile)
+}
+
+func main() {
+	InfoLogger.Println("starting")
+	set_BLE_NAME()
 	adapter := bluetooth.DefaultAdapter
 	must("enable BLE stack", adapter.Enable())
 	adv := adapter.DefaultAdvertisement()
 	must("config adv", adv.Configure(bluetooth.AdvertisementOptions{
-		LocalName:    "NUS", // Nordic UART Service
+		LocalName:    ble_name,
 		ServiceUUIDs: []bluetooth.UUID{serviceUUID},
 	}))
 	must("start adv", adv.Start())
 
-	var rxChar bluetooth.Characteristic
-	var txChar bluetooth.Characteristic
 	must("add service", adapter.AddService(&bluetooth.Service{
 		UUID: serviceUUID,
 		Characteristics: []bluetooth.CharacteristicConfig{
@@ -191,8 +250,15 @@ func main() {
 				Flags:  bluetooth.CharacteristicWritePermission | bluetooth.CharacteristicWriteWithoutResponsePermission,
 				WriteEvent: func(client bluetooth.Connection, offset int, value []byte) {
 					txChar.Write(value)
+					var line []byte
 					for _, c := range value {
-						rawterm.Putchar(c)
+						// rawterm.Putchar(c)
+						line = append(line, c)
+						if c == '}' {
+							InfoLogger.Println("Get BLE message")
+							// InfoLogger.Println("Get BLE message:" + string(line))
+							bleCommandExecute(string(line))
+						}
 					}
 				},
 			},
@@ -203,37 +269,7 @@ func main() {
 			},
 		},
 	}))
-
-	rawterm.Configure()
-	defer rawterm.Restore()
-	print("NUS console enabled, use Ctrl-X to exit\r\n")
-	var line []byte
 	for {
-		ch := rawterm.Getchar()
-		rawterm.Putchar(ch)
-		line = append(line, ch)
-		// Send the current line to the central.
-		if ch == '\x18' {
-			// The user pressed Ctrl-X, exit the terminal.
-			break
-		} else if ch == '}' {
-			rxbuf := line // copy buffer
-			// Reset the slice while keeping the buffer in place.
-			line = line[:0]
-			fmt.Println("123" + string(rxbuf))
-			// Send the sendbuf after breaking it up in pieces.
-			//                      for len(sendbuf) != 0 {
-			//                              // Chop off up to 20 bytes from the sendbuf.
-			//                              partlen := 20
-			//                              if len(sendbuf) < 20 {
-			//                                      partlen = len(sendbuf)
-			//                              }
-			//                              part := sendbuf[:partlen]
-			//                              sendbuf = sendbuf[partlen:]
-			//                              // This also sends a notification.
-			//                              _, err := txChar.Write(part)
-			//                              must("send notification", err)
-			//                      }
-		}
 	}
 }
+
